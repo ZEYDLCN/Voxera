@@ -3,6 +3,7 @@ from voxera.db.repositories.contracts import (
     OrganizationRepository,
     ProductRepository,
     ReviewRepository,
+    ReviewSentimentRepository,
     SourceRepository,
 )
 from voxera.db.repositories.sqlalchemy import (
@@ -10,6 +11,7 @@ from voxera.db.repositories.sqlalchemy import (
     SqlAlchemyOrganizationRepository,
     SqlAlchemyProductRepository,
     SqlAlchemyReviewRepository,
+    SqlAlchemyReviewSentimentRepository,
     SqlAlchemySourceRepository,
 )
 
@@ -18,10 +20,12 @@ __all__ = [
     "OrganizationRepository",
     "ProductRepository",
     "ReviewRepository",
+    "ReviewSentimentRepository",
     "SourceRepository",
     "SqlAlchemyImportJobRepository",
     "SqlAlchemyOrganizationRepository",
     "SqlAlchemyProductRepository",
     "SqlAlchemyReviewRepository",
+    "SqlAlchemyReviewSentimentRepository",
     "SqlAlchemySourceRepository",
 ]

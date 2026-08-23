@@ -6,7 +6,7 @@ discovery and evidence-grounded LLM workflows.
 
 ## Current status
 
-Phase 2 is complete and Phase 3 is in progress. The repository contains the FastAPI
+Phases 1-3 are complete and Phase 4 is in progress. The repository contains the FastAPI
 platform foundation, a tenant-aware async SQLAlchemy data layer with Alembic migrations
 and PostgreSQL RLS policies, and the full ingestion pipeline: CSV/JSON/JSONL parsing, a
 deterministic preprocessing pipeline (normalization, PII masking, language detection,
@@ -15,8 +15,13 @@ small batches, and an asynchronous `POST /reviews/import-jobs` path that uploads
 MinIO/S3 and processes on a Celery worker with retries and a periodic reconciliation
 sweep standing in for a transactional outbox.
 
-Still open in Phase 3: multi-language PII/deduplication hardening. Phase 4 (sentiment
-baseline, embeddings, semantic search) is next.
+Phase 4 so far: a TF-IDF + Logistic Regression sentiment baseline (`voxera.ml.sentiment`)
+with a training/evaluation CLI, a versioned model registry on top of object storage, a
+`review_sentiments` table keyed by (review, model version) for reproducible re-analysis,
+and `POST /analytics/sentiment/analyze` + `GET /analytics/sentiment` endpoints. Still
+open in Phase 4: a transformer-based sentiment model for comparison, the embedding
+pipeline, pgvector indexing and semantic search, and a proper golden evaluation dataset
+(the bundled one is a small bootstrap set -- see `data/sentiment/README.md`).
 
 ## Development phases
 
@@ -114,6 +119,45 @@ reconciliation task (Celery beat, every 5 minutes) re-dispatches any job whose d
 enqueue was never confirmed or whose worker died mid-processing, and abandons a job
 that has exhausted its attempt budget -- see
 `voxera.services.import_job_service.reconcile_organization_import_jobs`.
+
+## Sentiment analysis
+
+Train and publish the TF-IDF + Logistic Regression baseline (object storage must be
+reachable; set `VOXERA_OBJECT_STORAGE_*` or run via `docker compose`):
+
+```bash
+python -m voxera.ml.sentiment.train --version tfidf-logreg-2026-08-23
+# prints the evaluation report, then publishes model.joblib + evaluation.json to
+# models/sentiment/<version>/ in object storage. Use --dry-run to just print the report.
+```
+
+Point the API at that version and restart it:
+
+```bash
+VOXERA_SENTIMENT_MODEL_VERSION=tfidf-logreg-2026-08-23
+```
+
+Then run and read sentiment:
+
+```bash
+curl -X POST "http://localhost:8000/analytics/sentiment/analyze?organization_id=<uuid>&product_id=<uuid>"
+# => {"analyzed": 41988, "model_version": "tfidf-logreg-2026-08-23",
+#     "label_counts": {"positive": 25600, "negative": 9200, "neutral": 7188}}
+
+curl "http://localhost:8000/analytics/sentiment?organization_id=<uuid>&product_id=<uuid>"
+# => {"total": 41988, "counts": {...}, "percentages": {"positive": 61.0, ...}}
+```
+
+Analysis is keyed by (review, model_version), not by overwriting a single column: a
+review already scored under the pinned version is skipped on the next call (safe to
+call repeatedly, e.g. after every import), and publishing a new model version
+re-analyzes everything under that version without losing prior results. See
+`voxera.services.sentiment_analysis_service` and `docs/ROADMAP.md` Phase 4.
+
+The bundled `data/sentiment/{train,golden}.csv` are a small, hand-labeled bilingual
+bootstrap dataset, not production training data -- see `data/sentiment/README.md`.
+`tests/evaluation/test_sentiment_golden.py` is the regression test that guards the
+baseline's F1 on the golden set; run it after any model or data change.
 
 Run quality checks:
 

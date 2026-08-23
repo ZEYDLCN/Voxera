@@ -49,3 +49,9 @@ class ImportJobStatus(StrEnum):
     PROCESSING = "processing"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class SentimentLabel(StrEnum):
+    NEGATIVE = "negative"
+    NEUTRAL = "neutral"
+    POSITIVE = "positive"

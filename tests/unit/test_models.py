@@ -10,6 +10,7 @@ def test_core_schema_tables_are_registered() -> None:
         "memberships",
         "organizations",
         "products",
+        "review_sentiments",
         "reviews",
         "sources",
         "users",
@@ -17,7 +18,14 @@ def test_core_schema_tables_are_registered() -> None:
 
 
 def test_every_tenant_table_has_organization_id() -> None:
-    for table_name in ("import_jobs", "memberships", "products", "reviews", "sources"):
+    for table_name in (
+        "import_jobs",
+        "memberships",
+        "products",
+        "review_sentiments",
+        "reviews",
+        "sources",
+    ):
         assert "organization_id" in Base.metadata.tables[table_name].columns
 
 

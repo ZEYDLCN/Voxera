@@ -2,12 +2,13 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from voxera.db.models import ImportJob, Organization, Product, Review, Source
-from voxera.db.models.enums import ImportJobStatus
+from voxera.db.models import ImportJob, Organization, Product, Review, ReviewSentiment, Source
+from voxera.db.models.enums import ImportJobStatus, ReviewStatus, SentimentLabel
 from voxera.db.repositories.contracts import (
     DuplicateReviewError,
     ImportJobCreate,
@@ -16,6 +17,7 @@ from voxera.db.repositories.contracts import (
     OrganizationCreate,
     ProductCreate,
     ReviewCreate,
+    ReviewSentimentCreate,
     SourceCreate,
 )
 
@@ -184,6 +186,85 @@ class SqlAlchemyReviewRepository:
             .offset(offset)
         )
         return list((await self._session.scalars(statement)).all())
+
+    async def list_for_analysis(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+        limit: int = 500,
+    ) -> list[Review]:
+        already_analyzed = select(ReviewSentiment.review_id).where(
+            ReviewSentiment.organization_id == self._organization_id,
+            ReviewSentiment.model_version == model_version,
+        )
+        statement = (
+            select(Review)
+            .where(
+                Review.organization_id == self._organization_id,
+                Review.product_id == product_id,
+                ~Review.id.in_(already_analyzed),
+            )
+            .order_by(Review.created_at)
+            .limit(limit)
+        )
+        return list((await self._session.scalars(statement)).all())
+
+    async def mark_ready(self, review_id: UUID) -> None:
+        statement = select(Review).where(
+            Review.id == review_id,
+            Review.organization_id == self._organization_id,
+        )
+        review = await self._session.scalar(statement)
+        if review is None:
+            raise ValueError(f"review {review_id} not found")
+        review.status = ReviewStatus.READY
+        await self._session.flush()
+
+
+class SqlAlchemyReviewSentimentRepository:
+    def __init__(self, session: AsyncSession, organization_id: UUID) -> None:
+        self._session = session
+        self._organization_id = organization_id
+
+    async def upsert(self, data: ReviewSentimentCreate) -> ReviewSentiment:
+        statement = (
+            pg_insert(ReviewSentiment)
+            .values(
+                organization_id=self._organization_id,
+                product_id=data.product_id,
+                review_id=data.review_id,
+                model_name=data.model_name,
+                model_version=data.model_version,
+                label=data.label,
+                score=data.score,
+            )
+            .on_conflict_do_update(
+                index_elements=["review_id", "model_version"],
+                set_={"label": data.label, "score": data.score},
+            )
+            .returning(ReviewSentiment)
+        )
+        result = await self._session.scalars(statement)
+        return result.one()
+
+    async def aggregate_distribution(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+    ) -> dict[SentimentLabel, int]:
+        statement = (
+            select(ReviewSentiment.label, func.count())
+            .where(
+                ReviewSentiment.organization_id == self._organization_id,
+                ReviewSentiment.product_id == product_id,
+                ReviewSentiment.model_version == model_version,
+            )
+            .group_by(ReviewSentiment.label)
+        )
+        rows = await self._session.execute(statement)
+        return {label: count for label, count in rows.all()}
 
 
 class SqlAlchemyImportJobRepository:

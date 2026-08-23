@@ -1,0 +1,25 @@
+text,label
+"Uygulamaya bir türlü giriş yapamıyorum, sürekli hata veriyor.",negative
+I keep getting an error every time I try to log in.,negative
+"Ödeme yaparken uygulama çöktü, param gitti sipariş yok.",negative
+The checkout page crashed and I was charged with no order.,negative
+"Uygulama çok yavaşladı, her şey donuyor.",negative
+"Everything freezes constantly, the app is unusable now.",negative
+"Destek ekibinden hâlâ bir yanıt alamadım, günlerdir bekliyorum.",negative
+"Support hasn't answered me in days, very disappointing.",negative
+"Bataryası bir günü bile çıkarmıyor, çok kötü.",negative
+"Battery barely survives half a day, really poor.",negative
+"Yeni tasarım gerçekten çok güzel olmuş, elime yakıştı.",positive
+"The redesign looks amazing, I really enjoy using it now.",positive
+Ödeme işlemi saniyeler içinde sorunsuz tamamlandı.,positive
+Payment went through instantly without any issues.,positive
+"Uygulama artık çok akıcı çalışıyor, performans mükemmel.",positive
+"Performance is excellent now, everything runs smoothly.",positive
+"Kargo çok hızlı geldi, beklediğimden erken teslim edildi.",positive
+"Delivery was super fast, arrived earlier than expected.",positive
+Uygulama geçen ay yeni bir sürümle güncellendi.,neutral
+The app was updated to a new version last month.,neutral
+Sipariş takibi ayarlar menüsünden görüntülenebiliyor.,neutral
+Order tracking can be viewed from the settings menu.,neutral
+Ürün hem iOS hem Android için mevcut.,neutral
+The product is available for both iOS and Android.,neutral

@@ -9,24 +9,38 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from voxera.db.ids import uuid7
-from voxera.db.models import ImportJob
-from voxera.db.models.enums import ImportFormat, ImportJobStatus
+from voxera.db.models import ImportJob, Review
+from voxera.db.models.enums import ImportFormat, ImportJobStatus, ReviewStatus, SentimentLabel
 from voxera.db.repositories.contracts import (
     DuplicateReviewError,
     ImportJobCreate,
     ImportJobResult,
     ReviewCreate,
+    ReviewSentimentCreate,
 )
 from voxera.storage.object_storage import ObjectNotFoundError
 
 
 class FakeReviewRepository:
-    """Stand-in for `ReviewRepository`."""
+    """Stand-in for `ReviewRepository`.
 
-    def __init__(self, *, existing_hashes: set[str] | None = None) -> None:
+    `analyzed_pairs` -- shared with a `FakeReviewSentimentRepository` -- mirrors the
+    cross-table (review_id, model_version) check the real `list_for_analysis` does
+    against `review_sentiments`, so tests can exercise real idempotency behavior.
+    """
+
+    def __init__(
+        self,
+        *,
+        existing_hashes: set[str] | None = None,
+        reviews: list[Review] | None = None,
+        analyzed_pairs: set[tuple[UUID, str]] | None = None,
+    ) -> None:
         self.added: list[ReviewCreate] = []
         self._hashes = set(existing_hashes or set())
         self._external_ids: set[str] = set()
+        self.reviews: dict[UUID, Review] = {review.id: review for review in (reviews or [])}
+        self._analyzed_pairs = analyzed_pairs if analyzed_pairs is not None else set()
 
     async def add(self, data: ReviewCreate) -> ReviewCreate:
         if data.external_id is not None and data.external_id in self._external_ids:
@@ -37,8 +51,8 @@ class FakeReviewRepository:
         self.added.append(data)
         return data
 
-    async def get(self, review_id: object) -> None:
-        raise NotImplementedError
+    async def get(self, review_id: UUID) -> Review | None:
+        return self.reviews.get(review_id)
 
     async def exists_with_content_hash(self, content_hash: str) -> bool:
         return content_hash in self._hashes
@@ -47,6 +61,49 @@ class FakeReviewRepository:
         self, product_id: object, *, limit: int = 100, offset: int = 0
     ) -> list[object]:
         raise NotImplementedError
+
+    async def list_for_analysis(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+        limit: int = 500,
+    ) -> list[Review]:
+        return [
+            review
+            for review in self.reviews.values()
+            if review.product_id == product_id
+            and (review.id, model_version) not in self._analyzed_pairs
+        ][:limit]
+
+    async def mark_ready(self, review_id: UUID) -> None:
+        self.reviews[review_id].status = ReviewStatus.READY
+
+
+class FakeReviewSentimentRepository:
+    """Stand-in for `ReviewSentimentRepository`."""
+
+    def __init__(self, *, analyzed_pairs: set[tuple[UUID, str]] | None = None) -> None:
+        self.records: dict[tuple[UUID, str], ReviewSentimentCreate] = {}
+        self._analyzed_pairs = analyzed_pairs if analyzed_pairs is not None else set()
+
+    async def upsert(self, data: ReviewSentimentCreate) -> ReviewSentimentCreate:
+        key = (data.review_id, data.model_version)
+        self.records[key] = data
+        self._analyzed_pairs.add(key)
+        return data
+
+    async def aggregate_distribution(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+    ) -> dict[SentimentLabel, int]:
+        counts: dict[SentimentLabel, int] = {}
+        for (_, version), data in self.records.items():
+            if version == model_version and data.product_id == product_id:
+                counts[data.label] = counts.get(data.label, 0) + 1
+        return counts
 
 
 class FakeObjectStorage:
@@ -151,3 +208,23 @@ def make_import_job(**overrides: object) -> ImportJob:
     }
     defaults.update(overrides)
     return ImportJob(**defaults)  # type: ignore[arg-type]
+
+
+def make_review(**overrides: object) -> Review:
+    defaults: dict[str, object] = {
+        "id": uuid7(),
+        "organization_id": uuid4(),
+        "product_id": uuid4(),
+        "source_id": uuid4(),
+        "external_id": None,
+        "rating": None,
+        "language": "en",
+        "text_redacted": "Great app, works well.",
+        "text_normalized": "great app, works well.",
+        "content_hash": "deadbeef",
+        "occurred_at": datetime.now(UTC),
+        "status": ReviewStatus.PENDING,
+        "attributes": {},
+    }
+    defaults.update(overrides)
+    return Review(**defaults)  # type: ignore[arg-type]

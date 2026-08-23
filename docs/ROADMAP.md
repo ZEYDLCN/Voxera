@@ -42,12 +42,24 @@ crashed workers.
 
 ## Phase 4 — Core ML and search
 
-- Versioned sentiment baseline and evaluation report
-- Batch embedding pipeline and pgvector HNSW index
-- Semantic search with product/date/source filters
-- Golden datasets and regression checks
+- [x] Versioned sentiment baseline and evaluation report (`voxera.ml.sentiment`:
+      TF-IDF + Logistic Regression, `evaluate_model`, `SentimentModelRegistry` on top
+      of object storage; `python -m voxera.ml.sentiment.train` trains, evaluates and
+      publishes a version)
+- [x] Golden dataset and regression check (`data/sentiment/{train,golden}.csv` --
+      small bootstrap set, see `data/sentiment/README.md` -- and
+      `tests/evaluation/test_sentiment_golden.py` asserting a macro-F1 floor)
+- [x] Reproducible per-review analysis (`review_sentiments` table keyed by
+      (review_id, model_version); `POST /analytics/sentiment/analyze` and
+      `GET /analytics/sentiment`; `voxera.services.sentiment_analysis_service`)
+- [ ] Transformer-based sentiment model for comparison against the baseline (spec's
+      model-comparison ladder: TF-IDF+LogReg -> TF-IDF+SVM -> Transformer)
+- [ ] Batch embedding pipeline and pgvector HNSW index
+- [ ] Semantic search with product/date/source filters
 
-Exit: every eligible review has reproducible analysis and semantic search meets Recall@K target.
+Exit: every eligible review has reproducible analysis and semantic search meets Recall@K
+target. Sentiment analysis meets this today (idempotent, versioned, regression-tested);
+semantic search is still open.
 
 ## Phase 5 — Topic intelligence
 

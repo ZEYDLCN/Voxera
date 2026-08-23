@@ -1,0 +1,71 @@
+text,label
+Son güncellemeden sonra uygulamaya giriş yapamıyorum.,negative
+"Login ekranında sürekli hata alıyorum, çok sinir bozucu.",negative
+"SMS doğrulama kodu bir türlü gelmiyor, giriş yapamıyorum.",negative
+Şifremi sıfırlamak istiyorum ama mail hiç ulaşmıyor.,negative
+"Face ID ile giriş artık hiç çalışmıyor, berbat bir deneyim.",negative
+"I can't log in anymore after the last update, it's broken.",negative
+The login screen keeps freezing and throwing errors.,negative
+"OTP code never arrives, I'm locked out of my account.",negative
+"Password reset email never shows up, completely useless.",negative
+Face ID authentication fails every single time now.,negative
+"Ödeme ekranında sürekli hata alıyorum, param çekildi ama sipariş oluşmadı.",negative
+"Kart bilgilerimi girince uygulama çöküyor, ödeme yapamıyorum.",negative
+"Fatura tutarı yanlış hesaplanmış, destek de cevap vermiyor.",negative
+Payment keeps failing even though my card is valid.,negative
+"I was charged twice for the same order, terrible experience.",negative
+Checkout crashes right before confirming the payment.,negative
+Uygulama son zamanlarda çok yavaş açılıyor ve donuyor.,negative
+Her açtığımda uygulama birkaç saniye sonra çöküyor.,negative
+"Performans berbat, her sayfa geçişinde takılıyor.",negative
+"The app crashes every time I open it, completely unusable.",negative
+Performance has gotten so much worse since the update.,negative
+"It takes forever to load anything, extremely slow now.",negative
+Destek ekibine yazdım ama üç gündür cevap alamadım.,negative
+"Kargom bir haftadır kayıp, hiçbir bilgi verilmiyor.",negative
+"Bataryası gerçekten çok kötü, bir günü bile çıkarmıyor.",negative
+"Customer support never replies, I've been waiting for days.",negative
+My package has been stuck in transit for over a week.,negative
+"Battery life is genuinely awful, barely lasts half a day.",negative
+"Bu uygulama gerçekten çok kötü, hiç tavsiye etmiyorum.",negative
+"Worst app I've used in years, do not recommend it.",negative
+"Yeni tasarım gerçekten çok başarılı olmuş, çok beğendim.",positive
+Arayüz artık çok daha sade ve kullanımı keyifli.,positive
+"Uygulama harika çalışıyor, hiç sorun yaşamadım.",positive
+Yeni güncelleme ile birlikte her şey çok daha akıcı.,positive
+"The new design looks fantastic, really love the update.",positive
+"This app works great, no issues at all so far.",positive
+The interface is so much cleaner and easier to use now.,positive
+Everything feels smoother since the latest release.,positive
+"Uygulama artık çok hızlı açılıyor, performans harika.",positive
+"Destek ekibi sorunumu dakikalar içinde çözdü, teşekkürler.",positive
+"Telefon çok hızlı çalışıyor, performansından memnunum.",positive
+"The app opens instantly now, performance is excellent.",positive
+"Support solved my issue within minutes, great service.",positive
+"Phone performance is impressively fast, very happy with it.",positive
+Ödeme işlemi çok hızlı ve sorunsuz tamamlandı.,positive
+"Kargo beklediğimden çok daha hızlı geldi, çok memnun kaldım.",positive
+"Bataryası gün boyu rahatlıkla yetiyor, çok memnunum.",positive
+Checkout was fast and completely painless this time.,positive
+"Delivery arrived earlier than expected, very impressed.",positive
+"Battery easily lasts all day, really happy with it.",positive
+"Bu ürünü herkese tavsiye ederim, gerçekten harika.",positive
+"Highly recommend this product, absolutely love it.",positive
+Uygulama son güncellemede yeni bir arayüz tasarımı aldı.,neutral
+Sipariş üç iş günü içinde teslim edildi.,neutral
+"Uygulamayı geçen hafta indirdim, henüz her özelliği denemedim.",neutral
+Ödeme ekranında kart bilgileri ve fatura adresi giriliyor.,neutral
+Yeni sürüm bugün Google Play üzerinden yayınlandı.,neutral
+Ayarlar menüsünden bildirim tercihleri değiştirilebiliyor.,neutral
+Uygulama iOS ve Android sürümlerinde de kullanılabiliyor.,neutral
+Telefonun ekran boyutu önceki modelle aynı.,neutral
+The app received a new interface design in the last update.,neutral
+The order was delivered within three business days.,neutral
+I downloaded the app last week and haven't tried every feature.,neutral
+The checkout screen asks for card details and a billing address.,neutral
+The new version was released on Google Play today.,neutral
+Notification preferences can be changed from the settings menu.,neutral
+The app is available on both iOS and Android.,neutral
+The screen size is the same as the previous model.,neutral
+Fiyatı diğer modellerle hemen hemen aynı seviyede.,neutral
+The price is roughly the same as other models in this range.,neutral

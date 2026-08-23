@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     object_storage_secret_key: SecretStr = SecretStr("voxera-local-secret")
     object_storage_bucket: str = "voxera-raw"
 
+    # Pins which trained model version /analytics/sentiment serves and writes results
+    # under. None (the default) disables the sentiment endpoints entirely rather than
+    # silently falling back to "whatever was last trained" -- see
+    # voxera.ml.sentiment.train for publishing a version.
+    sentiment_model_version: str | None = None
+
     @model_validator(mode="after")
     def reject_unsafe_production_defaults(self) -> Self:
         if self.environment == "production":

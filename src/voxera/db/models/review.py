@@ -36,6 +36,7 @@ class Review(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ondelete="CASCADE",
         ),
         UniqueConstraint("source_id", "external_id"),
+        UniqueConstraint("id", "organization_id"),
         CheckConstraint("rating IS NULL OR rating BETWEEN 1 AND 5", name="rating_range"),
         Index(
             "ix_reviews_organization_product_occurred",
