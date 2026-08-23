@@ -24,12 +24,17 @@ Exit: organizations, products, sources and reviews can be persisted without tena
 
 ## Phase 3 — Ingestion and preprocessing
 
-- CSV/JSON schemas and streaming parsers
-- Object-storage upload flow
-- Import jobs, Celery workers, retries and transactional outbox
-- Language detection, text normalization, PII masking and deduplication
+- [x] CSV/JSON/JSONL schemas and streaming parsers (`voxera.ingestion`)
+- [x] Language detection, text normalization, PII masking and deduplication
+      (`voxera.preprocessing`), wired through `POST /reviews/import`
+      (`voxera.services.import_service`)
+- [ ] Object-storage upload flow
+- [ ] Import jobs, Celery workers, retries and transactional outbox
 
-Exit: a large CSV import completes asynchronously and produces normalized reviews.
+Exit: a large CSV import completes asynchronously and produces normalized reviews. The
+synchronous `/reviews/import` endpoint satisfies row-level validation, preprocessing and
+content-hash dedup today; moving large imports off the request path to a Celery worker
+queue is the remaining exit criterion.
 
 ## Phase 4 — Core ML and search
 

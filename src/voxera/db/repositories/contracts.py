@@ -7,6 +7,10 @@ from voxera.db.models import Organization, Product, Review, Source
 from voxera.db.models.enums import SourceType
 
 
+class DuplicateReviewError(Exception):
+    """Raised when a review violates a uniqueness constraint (e.g. source + external_id)."""
+
+
 @dataclass(frozen=True, slots=True)
 class OrganizationCreate:
     name: str
@@ -70,9 +74,15 @@ class SourceRepository(Protocol):
 
 
 class ReviewRepository(Protocol):
-    async def add(self, data: ReviewCreate) -> Review: ...
+    async def add(self, data: ReviewCreate) -> Review:
+        """Persist a review. Raises `DuplicateReviewError` on a uniqueness conflict."""
+        ...
 
     async def get(self, review_id: UUID) -> Review | None: ...
+
+    async def exists_with_content_hash(self, content_hash: str) -> bool:
+        """Whether a review with this exact cleaned-text hash already exists for the tenant."""
+        ...
 
     async def list_for_product(
         self,

@@ -1,10 +1,13 @@
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voxera.db.models import Organization, Product, Review, Source
 from voxera.db.repositories.contracts import (
+    DuplicateReviewError,
     OrganizationCreate,
     ProductCreate,
     ReviewCreate,
@@ -50,7 +53,7 @@ class SqlAlchemyProductRepository:
             Product.id == product_id,
             Product.organization_id == self._organization_id,
         )
-        return await self._session.scalar(statement)
+        return cast(Product | None, await self._session.scalar(statement))
 
     async def list(self, *, limit: int = 100, offset: int = 0) -> list[Product]:
         statement = (
@@ -87,7 +90,7 @@ class SqlAlchemySourceRepository:
             Source.id == source_id,
             Source.organization_id == self._organization_id,
         )
-        return await self._session.scalar(statement)
+        return cast(Source | None, await self._session.scalar(statement))
 
     async def list_for_product(self, product_id: UUID) -> list[Source]:
         statement = (
@@ -121,7 +124,14 @@ class SqlAlchemyReviewRepository:
             attributes=data.attributes,
         )
         self._session.add(review)
-        await self._session.flush()
+        try:
+            # A savepoint keeps one bad row (e.g. a repeated external_id) from aborting
+            # the whole import transaction.
+            async with self._session.begin_nested():
+                await self._session.flush()
+        except IntegrityError as exc:
+            self._session.expunge(review)
+            raise DuplicateReviewError(str(exc.orig)) from exc
         return review
 
     async def get(self, review_id: UUID) -> Review | None:
@@ -129,7 +139,18 @@ class SqlAlchemyReviewRepository:
             Review.id == review_id,
             Review.organization_id == self._organization_id,
         )
-        return await self._session.scalar(statement)
+        return cast(Review | None, await self._session.scalar(statement))
+
+    async def exists_with_content_hash(self, content_hash: str) -> bool:
+        statement = select(
+            select(Review.id)
+            .where(
+                Review.organization_id == self._organization_id,
+                Review.content_hash == content_hash,
+            )
+            .exists()
+        )
+        return bool(await self._session.scalar(statement))
 
     async def list_for_product(
         self,

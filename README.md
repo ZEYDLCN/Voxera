@@ -6,8 +6,15 @@ discovery and evidence-grounded LLM workflows.
 
 ## Current status
 
-Phase 2 is in progress. The repository contains the FastAPI platform foundation plus a
-tenant-aware async SQLAlchemy data layer, Alembic migrations and PostgreSQL RLS policies.
+Phase 2 is complete and Phase 3 is in progress. The repository contains the FastAPI
+platform foundation, a tenant-aware async SQLAlchemy data layer with Alembic migrations
+and PostgreSQL RLS policies, and the first ingestion slice: CSV/JSON/JSONL parsing, a
+deterministic preprocessing pipeline (normalization, PII masking, language detection,
+hashing) and a synchronous `POST /reviews/import` endpoint with row-level validation and
+content-hash deduplication.
+
+Still open in Phase 3: object-storage upload flow, Celery-backed background import jobs
+with retries/transactional outbox, and multi-language PII/deduplication hardening.
 
 ## Development phases
 
@@ -61,6 +68,27 @@ Useful URLs:
 - Liveness: `http://localhost:8000/health/live`
 - Readiness: `http://localhost:8000/health/ready`
 - MinIO console: `http://localhost:9001`
+
+## Importing reviews
+
+`POST /reviews/import` accepts a CSV, JSON array or JSON Lines file for an existing
+organization/product/source and returns a per-row summary (imported, duplicates,
+rejected, with reasons):
+
+```bash
+curl -X POST "http://localhost:8000/reviews/import" \
+  -F "organization_id=<uuid>" \
+  -F "product_id=<uuid>" \
+  -F "source_id=<uuid>" \
+  -F "format=csv" \
+  -F "file=@reviews.csv"
+```
+
+Each row is validated against a unified schema (`text`, `occurred_at`, optional
+`external_id`/`rating`/`language`/`attributes`), then run through the deterministic
+preprocessing pipeline (HTML/URL stripping, whitespace normalization, PII masking,
+language detection, SHA-256 content hashing) before being deduplicated and persisted.
+A malformed row never aborts the rest of the file.
 
 Run quality checks:
 
