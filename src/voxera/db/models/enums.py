@@ -36,3 +36,16 @@ class ReviewStatus(StrEnum):
     PENDING = "pending"
     READY = "ready"
     REJECTED = "rejected"
+
+
+class ImportFormat(StrEnum):
+    CSV = "csv"
+    JSON = "json"
+    JSONL = "jsonl"
+
+
+class ImportJobStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"

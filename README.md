@@ -8,13 +8,15 @@ discovery and evidence-grounded LLM workflows.
 
 Phase 2 is complete and Phase 3 is in progress. The repository contains the FastAPI
 platform foundation, a tenant-aware async SQLAlchemy data layer with Alembic migrations
-and PostgreSQL RLS policies, and the first ingestion slice: CSV/JSON/JSONL parsing, a
+and PostgreSQL RLS policies, and the full ingestion pipeline: CSV/JSON/JSONL parsing, a
 deterministic preprocessing pipeline (normalization, PII masking, language detection,
-hashing) and a synchronous `POST /reviews/import` endpoint with row-level validation and
-content-hash deduplication.
+hashing), content-hash deduplication, a synchronous `POST /reviews/import` endpoint for
+small batches, and an asynchronous `POST /reviews/import-jobs` path that uploads to
+MinIO/S3 and processes on a Celery worker with retries and a periodic reconciliation
+sweep standing in for a transactional outbox.
 
-Still open in Phase 3: object-storage upload flow, Celery-backed background import jobs
-with retries/transactional outbox, and multi-language PII/deduplication hardening.
+Still open in Phase 3: multi-language PII/deduplication hardening. Phase 4 (sentiment
+baseline, embeddings, semantic search) is next.
 
 ## Development phases
 
@@ -49,7 +51,7 @@ Start the API directly:
 uvicorn apps.api.main:app --reload
 ```
 
-Or start the API and backing services:
+Or start the API, Celery worker/beat and backing services (Postgres, Redis, MinIO):
 
 ```bash
 docker compose up --build
@@ -89,6 +91,29 @@ Each row is validated against a unified schema (`text`, `occurred_at`, optional
 preprocessing pipeline (HTML/URL stripping, whitespace normalization, PII masking,
 language detection, SHA-256 content hashing) before being deduplicated and persisted.
 A malformed row never aborts the rest of the file.
+
+For large files, `POST /reviews/import-jobs` uploads the file to object storage,
+records a job row and returns `202 Accepted` immediately; a Celery worker downloads,
+preprocesses and persists reviews off the request path using the exact same pipeline:
+
+```bash
+curl -X POST "http://localhost:8000/reviews/import-jobs" \
+  -F "organization_id=<uuid>" \
+  -F "product_id=<uuid>" \
+  -F "source_id=<uuid>" \
+  -F "format=csv" \
+  -F "file=@large-export.csv"
+# => {"id": "...", "status": "pending", ...}
+
+curl "http://localhost:8000/reviews/import-jobs/<job id>?organization_id=<uuid>"
+# => {"id": "...", "status": "succeeded", "total_rows": 42000, "imported": 41988, ...}
+```
+
+A failed attempt retries with exponential backoff (up to 5 attempts). A periodic
+reconciliation task (Celery beat, every 5 minutes) re-dispatches any job whose direct
+enqueue was never confirmed or whose worker died mid-processing, and abandons a job
+that has exhausted its attempt budget -- see
+`voxera.services.import_job_service.reconcile_organization_import_jobs`.
 
 Run quality checks:
 

@@ -28,13 +28,17 @@ Exit: organizations, products, sources and reviews can be persisted without tena
 - [x] Language detection, text normalization, PII masking and deduplication
       (`voxera.preprocessing`), wired through `POST /reviews/import`
       (`voxera.services.import_service`)
-- [ ] Object-storage upload flow
-- [ ] Import jobs, Celery workers, retries and transactional outbox
+- [x] Object-storage upload flow (`voxera.storage.S3ObjectStorage`, MinIO/S3-compatible)
+- [x] Import jobs, Celery workers and retries (`apps.worker`, `import_jobs` table,
+      `POST /reviews/import-jobs` + `GET /reviews/import-jobs/{id}`). A periodic
+      reconciliation task stands in for a generic transactional outbox -- see the
+      `ImportJob.status`/`dispatched_at` design note in
+      `voxera.services.import_job_service`.
 
-Exit: a large CSV import completes asynchronously and produces normalized reviews. The
-synchronous `/reviews/import` endpoint satisfies row-level validation, preprocessing and
-content-hash dedup today; moving large imports off the request path to a Celery worker
-queue is the remaining exit criterion.
+Exit: a large CSV import completes asynchronously and produces normalized reviews. Met:
+upload -> `import_jobs` row -> Celery worker -> `ReviewImportService` -> job status +
+summary, with exponential-backoff retries and reconciliation for lost dispatches or
+crashed workers.
 
 ## Phase 4 — Core ML and search
 

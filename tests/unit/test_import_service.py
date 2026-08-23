@@ -2,41 +2,11 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from tests.unit.fakes import FakeReviewRepository
 
-from voxera.db.repositories.contracts import DuplicateReviewError, ReviewCreate
 from voxera.ingestion.errors import RowError
 from voxera.ingestion.schemas import RawReviewRow
 from voxera.services.import_service import ReviewImportService
-
-
-class FakeReviewRepository:
-    """In-memory stand-in for `ReviewRepository` so the service can be tested without a
-    running PostgreSQL instance."""
-
-    def __init__(self, *, existing_hashes: set[str] | None = None) -> None:
-        self.added: list[ReviewCreate] = []
-        self._hashes = set(existing_hashes or set())
-        self._external_ids: set[str] = set()
-
-    async def add(self, data: ReviewCreate) -> ReviewCreate:
-        if data.external_id is not None and data.external_id in self._external_ids:
-            raise DuplicateReviewError("external_id already exists")
-        if data.external_id is not None:
-            self._external_ids.add(data.external_id)
-        self._hashes.add(data.content_hash)
-        self.added.append(data)
-        return data
-
-    async def get(self, review_id: object) -> None:
-        raise NotImplementedError
-
-    async def exists_with_content_hash(self, content_hash: str) -> bool:
-        return content_hash in self._hashes
-
-    async def list_for_product(
-        self, product_id: object, *, limit: int = 100, offset: int = 0
-    ) -> list[object]:
-        raise NotImplementedError
 
 
 def _row(text: str, *, external_id: str | None = None) -> tuple[int, RawReviewRow, None]:

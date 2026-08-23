@@ -25,6 +25,52 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    command: celery -A apps.worker.celery_app worker --loglevel=info
+    environment:
+      VOXERA_ENVIRONMENT: local
+      VOXERA_DATABASE_URL: postgresql+asyncpg://voxera_app:voxera-app-local@postgres:5432/voxera
+      VOXERA_REDIS_URL: redis://redis:6379/0
+      VOXERA_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      VOXERA_OBJECT_STORAGE_ACCESS_KEY: voxera
+      VOXERA_OBJECT_STORAGE_SECRET_KEY: voxera-local-secret
+      VOXERA_OBJECT_STORAGE_BUCKET: voxera-raw
+      VOXERA_SECRET_KEY: local-development-key-change-me
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  beat:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    command: celery -A apps.worker.celery_app beat --loglevel=info
+    environment:
+      VOXERA_ENVIRONMENT: local
+      VOXERA_DATABASE_URL: postgresql+asyncpg://voxera_app:voxera-app-local@postgres:5432/voxera
+      VOXERA_REDIS_URL: redis://redis:6379/0
+      VOXERA_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      VOXERA_OBJECT_STORAGE_ACCESS_KEY: voxera
+      VOXERA_OBJECT_STORAGE_SECRET_KEY: voxera-local-secret
+      VOXERA_OBJECT_STORAGE_BUCKET: voxera-raw
+      VOXERA_SECRET_KEY: local-development-key-change-me
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -67,6 +113,24 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the raw-import bucket, then exits. api/worker wait for it to
+  # finish successfully before starting, so uploads never race an empty bucket.
+  minio-init:
+    image: minio/mc:latest
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 voxera voxera-local-secret &&
+      mc mb --ignore-existing local/voxera-raw
+      "
+    depends_on:
+      minio:
+        condition: service_healthy
 
 volumes:
   postgres_data:

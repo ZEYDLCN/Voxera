@@ -3,12 +3,16 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from voxera.db.models import Organization, Product, Review, Source
-from voxera.db.models.enums import SourceType
+from voxera.db.models import ImportJob, Organization, Product, Review, Source
+from voxera.db.models.enums import ImportFormat, SourceType
 
 
 class DuplicateReviewError(Exception):
     """Raised when a review violates a uniqueness constraint (e.g. source + external_id)."""
+
+
+class ImportJobNotFoundError(Exception):
+    """Raised when an import job row no longer exists (e.g. the tenant was removed)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,10 +55,28 @@ class SourceCreate:
     attributes: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class ImportJobCreate:
+    product_id: UUID
+    source_id: UUID
+    object_key: str
+    source_format: ImportFormat
+
+
+@dataclass(frozen=True, slots=True)
+class ImportJobResult:
+    total_rows: int
+    imported: int
+    duplicates: int
+    rejected: int
+
+
 class OrganizationRepository(Protocol):
     async def add(self, data: OrganizationCreate) -> Organization: ...
 
     async def get(self, organization_id: UUID) -> Organization | None: ...
+
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Organization]: ...
 
 
 class ProductRepository(Protocol):
@@ -91,3 +113,27 @@ class ReviewRepository(Protocol):
         limit: int = 100,
         offset: int = 0,
     ) -> list[Review]: ...
+
+
+class ImportJobRepository(Protocol):
+    async def add(self, data: ImportJobCreate) -> ImportJob: ...
+
+    async def get(self, job_id: UUID) -> ImportJob | None: ...
+
+    async def mark_dispatched(self, job_id: UUID) -> None: ...
+
+    async def mark_processing(self, job_id: UUID) -> None: ...
+
+    async def mark_succeeded(self, job_id: UUID, result: ImportJobResult) -> None: ...
+
+    async def mark_failed(self, job_id: UUID, error: str) -> None: ...
+
+    async def list_dispatch_candidates(
+        self,
+        *,
+        dispatched_before: datetime,
+        limit: int = 50,
+    ) -> list[ImportJob]:
+        """Pending jobs never dispatched, or dispatched before `dispatched_before` and
+        still pending -- the reconciliation safety net for a missed or lost enqueue call."""
+        ...

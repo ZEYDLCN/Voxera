@@ -91,7 +91,8 @@ async def test_repository_never_returns_another_tenants_product(
                     "WHERE policyname = 'tenant_isolation'"
                 )
             )
-            assert policies == 4
+            # memberships, products, sources, reviews, import_jobs
+            assert policies == 5
             is_superuser = await session.scalar(
                 text("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
             )

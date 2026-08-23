@@ -1,13 +1,18 @@
+from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from voxera.db.models import Organization, Product, Review, Source
+from voxera.db.models import ImportJob, Organization, Product, Review, Source
+from voxera.db.models.enums import ImportJobStatus
 from voxera.db.repositories.contracts import (
     DuplicateReviewError,
+    ImportJobCreate,
+    ImportJobNotFoundError,
+    ImportJobResult,
     OrganizationCreate,
     ProductCreate,
     ReviewCreate,
@@ -27,6 +32,15 @@ class SqlAlchemyOrganizationRepository:
 
     async def get(self, organization_id: UUID) -> Organization | None:
         return await self._session.get(Organization, organization_id)
+
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Organization]:
+        statement = (
+            select(Organization)
+            .order_by(Organization.created_at.desc(), Organization.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return list((await self._session.scalars(statement)).all())
 
 
 class SqlAlchemyProductRepository:
@@ -170,3 +184,93 @@ class SqlAlchemyReviewRepository:
             .offset(offset)
         )
         return list((await self._session.scalars(statement)).all())
+
+
+class SqlAlchemyImportJobRepository:
+    def __init__(self, session: AsyncSession, organization_id: UUID) -> None:
+        self._session = session
+        self._organization_id = organization_id
+
+    async def add(self, data: ImportJobCreate) -> ImportJob:
+        job = ImportJob(
+            organization_id=self._organization_id,
+            product_id=data.product_id,
+            source_id=data.source_id,
+            object_key=data.object_key,
+            source_format=data.source_format,
+        )
+        self._session.add(job)
+        await self._session.flush()
+        return job
+
+    async def get(self, job_id: UUID) -> ImportJob | None:
+        statement = select(ImportJob).where(
+            ImportJob.id == job_id,
+            ImportJob.organization_id == self._organization_id,
+        )
+        return cast(ImportJob | None, await self._session.scalar(statement))
+
+    async def mark_dispatched(self, job_id: UUID) -> None:
+        job = await self._require(job_id)
+        job.dispatched_at = datetime.now(UTC)
+        await self._session.flush()
+
+    async def mark_processing(self, job_id: UUID) -> None:
+        job = await self._require(job_id)
+        job.status = ImportJobStatus.PROCESSING
+        job.attempts += 1
+        job.started_at = datetime.now(UTC)
+        await self._session.flush()
+
+    async def mark_succeeded(self, job_id: UUID, result: ImportJobResult) -> None:
+        job = await self._require(job_id)
+        job.status = ImportJobStatus.SUCCEEDED
+        job.completed_at = datetime.now(UTC)
+        job.total_rows = result.total_rows
+        job.imported_count = result.imported
+        job.duplicate_count = result.duplicates
+        job.rejected_count = result.rejected
+        job.error = None
+        await self._session.flush()
+
+    async def mark_failed(self, job_id: UUID, error: str) -> None:
+        job = await self._require(job_id)
+        job.status = ImportJobStatus.FAILED
+        job.completed_at = datetime.now(UTC)
+        job.error = error
+        await self._session.flush()
+
+    async def list_dispatch_candidates(
+        self,
+        *,
+        dispatched_before: datetime,
+        limit: int = 50,
+    ) -> list[ImportJob]:
+        statement = (
+            select(ImportJob)
+            .where(
+                ImportJob.organization_id == self._organization_id,
+                or_(
+                    and_(
+                        ImportJob.status == ImportJobStatus.PENDING,
+                        or_(
+                            ImportJob.dispatched_at.is_(None),
+                            ImportJob.dispatched_at < dispatched_before,
+                        ),
+                    ),
+                    and_(
+                        ImportJob.status == ImportJobStatus.PROCESSING,
+                        ImportJob.started_at < dispatched_before,
+                    ),
+                ),
+            )
+            .order_by(ImportJob.created_at)
+            .limit(limit)
+        )
+        return list((await self._session.scalars(statement)).all())
+
+    async def _require(self, job_id: UUID) -> ImportJob:
+        job = await self.get(job_id)
+        if job is None:
+            raise ImportJobNotFoundError(str(job_id))
+        return job

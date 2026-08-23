@@ -6,6 +6,7 @@ from voxera.db.models import Base
 
 def test_core_schema_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "import_jobs",
         "memberships",
         "organizations",
         "products",
@@ -16,7 +17,7 @@ def test_core_schema_tables_are_registered() -> None:
 
 
 def test_every_tenant_table_has_organization_id() -> None:
-    for table_name in ("memberships", "products", "reviews", "sources"):
+    for table_name in ("import_jobs", "memberships", "products", "reviews", "sources"):
         assert "organization_id" in Base.metadata.tables[table_name].columns
 
 
