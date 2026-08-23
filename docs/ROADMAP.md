@@ -54,12 +54,30 @@ crashed workers.
       `GET /analytics/sentiment`; `voxera.services.sentiment_analysis_service`)
 - [ ] Transformer-based sentiment model for comparison against the baseline (spec's
       model-comparison ladder: TF-IDF+LogReg -> TF-IDF+SVM -> Transformer)
-- [ ] Batch embedding pipeline and pgvector HNSW index
-- [ ] Semantic search with product/date/source filters
+- [x] Batch embedding pipeline (`voxera.embeddings`: TF-IDF + Truncated SVD/LSA,
+      `python -m voxera.embeddings.train` fits on a tenant's own reviews and publishes
+      via `EmbeddingModelRegistry`) and pgvector HNSW index
+      (`review_embeddings.embedding vector(256)`, `USING hnsw (... vector_cosine_ops)`)
+- [x] Semantic search (`GET /reviews/search`: query -> embed -> pgvector cosine search
+      -> top-K, `voxera.services.search_service`), scoped by product and model version
+      -- date/source filters still open
+- [ ] Multilingual sentence-transformer embedding model (multilingual-e5/BGE) to
+      replace/compare against the LSA baseline -- **blocked in this sandbox**: the
+      network proxy only reaches PyPI, and PyPI's default Linux `torch` wheel pulls a
+      multi-GB CUDA/GPU toolkit with no CPU-only wheel reachable from here, so
+      `sentence-transformers` could not be installed. `EmbeddingModel.embed_many` is
+      already the contract such a model would implement -- swapping it in needs no
+      redesign, just an environment with PyPI's CPU-only torch index reachable (or a
+      pre-built wheel supplied another way) plus a new pgvector column width if the
+      model's native dimensionality differs from 256.
+- [ ] Hybrid (BM25 + vector) search and reranking (spec sections 21-22)
+- [ ] Retrieval golden dataset and Precision@K/Recall@K/MRR/NDCG regression checks
 
 Exit: every eligible review has reproducible analysis and semantic search meets Recall@K
-target. Sentiment analysis meets this today (idempotent, versioned, regression-tested);
-semantic search is still open.
+target. Sentiment analysis and embeddings/search are both idempotent, versioned and
+working end-to-end today (verified against a mocked S3 plus SQL-compile checks against
+a real pgvector query shape). Not yet met: no Recall@K target has been measured, because
+there is no retrieval golden dataset yet to measure it against -- see the checklist above.
 
 ## Phase 5 — Topic intelligence
 

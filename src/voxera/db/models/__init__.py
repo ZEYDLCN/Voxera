@@ -3,6 +3,7 @@ from voxera.db.models.identity import Membership, Organization, User
 from voxera.db.models.import_job import ImportJob
 from voxera.db.models.product import Product, Source
 from voxera.db.models.review import Review
+from voxera.db.models.review_embedding import ReviewEmbedding
 from voxera.db.models.review_sentiment import ReviewSentiment
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "Organization",
     "Product",
     "Review",
+    "ReviewEmbedding",
     "ReviewSentiment",
     "Source",
     "User",

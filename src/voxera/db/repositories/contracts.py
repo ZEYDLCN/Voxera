@@ -3,7 +3,15 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from voxera.db.models import ImportJob, Organization, Product, Review, ReviewSentiment, Source
+from voxera.db.models import (
+    ImportJob,
+    Organization,
+    Product,
+    Review,
+    ReviewEmbedding,
+    ReviewSentiment,
+    Source,
+)
 from voxera.db.models.enums import ImportFormat, SentimentLabel, SourceType
 
 
@@ -81,6 +89,15 @@ class ReviewSentimentCreate:
     score: float
 
 
+@dataclass(frozen=True, slots=True)
+class ReviewEmbeddingCreate:
+    product_id: UUID
+    review_id: UUID
+    model_name: str
+    model_version: str
+    embedding: list[float]
+
+
 class OrganizationRepository(Protocol):
     async def add(self, data: OrganizationCreate) -> Organization: ...
 
@@ -143,6 +160,18 @@ class ReviewRepository(Protocol):
         """Flag a review as having been through at least one round of ML analysis."""
         ...
 
+    async def list_for_embedding(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+        limit: int = 500,
+    ) -> list[Review]:
+        """Reviews for the product with no embedding yet for `model_version` -- the
+        same idempotency pattern as `list_for_analysis`, against `review_embeddings`
+        instead of `review_sentiments`."""
+        ...
+
 
 class ImportJobRepository(Protocol):
     async def add(self, data: ImportJobCreate) -> ImportJob: ...
@@ -182,4 +211,24 @@ class ReviewSentimentRepository(Protocol):
     ) -> dict[SentimentLabel, int]:
         """Review counts per label for one product, scoped to one model version so a
         dashboard never mixes results from different model generations."""
+        ...
+
+
+class ReviewEmbeddingRepository(Protocol):
+    async def upsert(self, data: ReviewEmbeddingCreate) -> ReviewEmbedding:
+        """Insert an embedding, or overwrite it if this exact (review, model_version)
+        pair was already embedded -- re-running the same version is idempotent."""
+        ...
+
+    async def search_similar(
+        self,
+        product_id: UUID,
+        query_embedding: list[float],
+        *,
+        model_version: str,
+        limit: int = 10,
+    ) -> list[tuple[Review, float]]:
+        """Nearest reviews by cosine similarity (highest first), scoped to one product
+        and one model version -- comparing embeddings across model versions/families
+        is meaningless, so this never mixes them."""
         ...

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # voxera.ml.sentiment.train for publishing a version.
     sentiment_model_version: str | None = None
 
+    # Same pinning rationale as sentiment_model_version, for /analytics/embeddings and
+    # semantic search -- see voxera.embeddings.train.
+    embedding_model_version: str | None = None
+
     @model_validator(mode="after")
     def reject_unsafe_production_defaults(self) -> Self:
         if self.environment == "production":

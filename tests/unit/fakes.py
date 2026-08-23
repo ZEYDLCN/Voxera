@@ -16,9 +16,19 @@ from voxera.db.repositories.contracts import (
     ImportJobCreate,
     ImportJobResult,
     ReviewCreate,
+    ReviewEmbeddingCreate,
     ReviewSentimentCreate,
 )
 from voxera.storage.object_storage import ObjectNotFoundError
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(y * y for y in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 class FakeReviewRepository:
@@ -35,12 +45,14 @@ class FakeReviewRepository:
         existing_hashes: set[str] | None = None,
         reviews: list[Review] | None = None,
         analyzed_pairs: set[tuple[UUID, str]] | None = None,
+        embedded_pairs: set[tuple[UUID, str]] | None = None,
     ) -> None:
         self.added: list[ReviewCreate] = []
         self._hashes = set(existing_hashes or set())
         self._external_ids: set[str] = set()
         self.reviews: dict[UUID, Review] = {review.id: review for review in (reviews or [])}
         self._analyzed_pairs = analyzed_pairs if analyzed_pairs is not None else set()
+        self._embedded_pairs = embedded_pairs if embedded_pairs is not None else set()
 
     async def add(self, data: ReviewCreate) -> ReviewCreate:
         if data.external_id is not None and data.external_id in self._external_ids:
@@ -78,6 +90,64 @@ class FakeReviewRepository:
 
     async def mark_ready(self, review_id: UUID) -> None:
         self.reviews[review_id].status = ReviewStatus.READY
+
+    async def list_for_embedding(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+        limit: int = 500,
+    ) -> list[Review]:
+        return [
+            review
+            for review in self.reviews.values()
+            if review.product_id == product_id
+            and (review.id, model_version) not in self._embedded_pairs
+        ][:limit]
+
+
+class FakeReviewEmbeddingRepository:
+    """Stand-in for `ReviewEmbeddingRepository`.
+
+    `reviews_by_id` -- typically the same dict backing a `FakeReviewRepository` --
+    lets `search_similar` return real `Review` objects, matching what the SQL join
+    in the real repository does.
+    """
+
+    def __init__(
+        self,
+        *,
+        reviews_by_id: dict[UUID, Review] | None = None,
+        embedded_pairs: set[tuple[UUID, str]] | None = None,
+    ) -> None:
+        self.records: dict[tuple[UUID, str], ReviewEmbeddingCreate] = {}
+        self._reviews_by_id = reviews_by_id if reviews_by_id is not None else {}
+        self._embedded_pairs = embedded_pairs if embedded_pairs is not None else set()
+
+    async def upsert(self, data: ReviewEmbeddingCreate) -> ReviewEmbeddingCreate:
+        key = (data.review_id, data.model_version)
+        self.records[key] = data
+        self._embedded_pairs.add(key)
+        return data
+
+    async def search_similar(
+        self,
+        product_id: UUID,
+        query_embedding: list[float],
+        *,
+        model_version: str,
+        limit: int = 10,
+    ) -> list[tuple[Review, float]]:
+        candidates: list[tuple[Review, float]] = []
+        for (_, version), data in self.records.items():
+            if version != model_version or data.product_id != product_id:
+                continue
+            review = self._reviews_by_id.get(data.review_id)
+            if review is None:
+                continue
+            candidates.append((review, _cosine_similarity(query_embedding, data.embedding)))
+        candidates.sort(key=lambda pair: pair[1], reverse=True)
+        return candidates[:limit]
 
 
 class FakeReviewSentimentRepository:

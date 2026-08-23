@@ -18,10 +18,14 @@ sweep standing in for a transactional outbox.
 Phase 4 so far: a TF-IDF + Logistic Regression sentiment baseline (`voxera.ml.sentiment`)
 with a training/evaluation CLI, a versioned model registry on top of object storage, a
 `review_sentiments` table keyed by (review, model version) for reproducible re-analysis,
-and `POST /analytics/sentiment/analyze` + `GET /analytics/sentiment` endpoints. Still
-open in Phase 4: a transformer-based sentiment model for comparison, the embedding
-pipeline, pgvector indexing and semantic search, and a proper golden evaluation dataset
-(the bundled one is a small bootstrap set -- see `data/sentiment/README.md`).
+and `POST /analytics/sentiment/analyze` + `GET /analytics/sentiment` endpoints -- plus a
+TF-IDF + Truncated SVD (LSA) embedding baseline (`voxera.embeddings`), a `pgvector`
+`review_embeddings` table with an HNSW cosine index, and `POST /analytics/embeddings/generate`
++ `GET /reviews/search` for semantic search. Still open in Phase 4: a transformer-based
+sentiment model for comparison, a multilingual sentence-transformer embedding model
+(**this sandbox could not install one -- see "Embeddings" below**), hybrid (BM25 +
+vector) search and reranking, and a proper retrieval golden evaluation dataset (the
+sentiment one is a small bootstrap set -- see `data/sentiment/README.md`).
 
 ## Development phases
 
@@ -158,6 +162,50 @@ The bundled `data/sentiment/{train,golden}.csv` are a small, hand-labeled biling
 bootstrap dataset, not production training data -- see `data/sentiment/README.md`.
 `tests/evaluation/test_sentiment_golden.py` is the regression test that guards the
 baseline's F1 on the golden set; run it after any model or data change.
+
+## Embeddings and semantic search
+
+Fit the TF-IDF + Truncated SVD (LSA) baseline on a product's own reviews and publish it:
+
+```bash
+python -m voxera.embeddings.train --organization-id <uuid> --product-id <uuid> \
+  --version tfidf-svd-2026-08-23
+# fits on that tenant's review text (an LSA model is only as good as its corpus);
+# omit --organization-id to fit on --corpus-path instead (defaults to the bundled
+# bootstrap CSV, useful for --dry-run smoke tests without a database).
+```
+
+```bash
+VOXERA_EMBEDDING_MODEL_VERSION=tfidf-svd-2026-08-23
+```
+
+```bash
+curl -X POST "http://localhost:8000/analytics/embeddings/generate?organization_id=<uuid>&product_id=<uuid>"
+# => {"embedded": 41988, "model_version": "tfidf-svd-2026-08-23"}
+
+curl -G "http://localhost:8000/reviews/search" \
+  --data-urlencode "organization_id=<uuid>" --data-urlencode "product_id=<uuid>" \
+  --data-urlencode "query=Face ID ile giriş yapamayan kullanıcı yorumlarını getir"
+# => {"results": [{"review_id": "...", "text_redacted": "...", "similarity": 0.83}, ...]}
+```
+
+**Why LSA instead of a transformer embedding model right now:** the spec calls for a
+multilingual sentence-transformer (multilingual-e5/BGE); this sandbox's network proxy
+only reaches PyPI, and PyPI's default Linux `torch` wheel pulls a multi-GB CUDA/GPU
+toolkit with no CPU-only alternative reachable from here, so `sentence-transformers`
+could not be installed or verified in this environment. TF-IDF+SVD (LSA) is a real,
+classical embedding technique -- it captures term co-occurrence similarity across the
+fitted corpus (verified: a "giriş yapamıyorum" query ranks a paraphrased "login
+ekranında hata alıyorum" review far above an unrelated delivery review) -- and
+`EmbeddingModel.embed_many` is the exact contract a transformer model would implement,
+so swapping it in is a drop-in change to `voxera/embeddings/`, not a redesign. See
+`docs/ROADMAP.md` Phase 4.
+
+`review_embeddings.embedding` is a fixed-width `vector(256)` pgvector column with an
+HNSW cosine index; every model version stored there must produce exactly 256
+dimensions (`TfidfSvdEmbeddingModel` guarantees this by zero-padding when a small
+corpus forces a narrower SVD). A model family with a different native width is a
+schema migration + reindex, not a config change.
 
 Run quality checks:
 

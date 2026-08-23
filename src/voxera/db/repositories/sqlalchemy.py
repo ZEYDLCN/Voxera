@@ -7,7 +7,15 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from voxera.db.models import ImportJob, Organization, Product, Review, ReviewSentiment, Source
+from voxera.db.models import (
+    ImportJob,
+    Organization,
+    Product,
+    Review,
+    ReviewEmbedding,
+    ReviewSentiment,
+    Source,
+)
 from voxera.db.models.enums import ImportJobStatus, ReviewStatus, SentimentLabel
 from voxera.db.repositories.contracts import (
     DuplicateReviewError,
@@ -17,6 +25,7 @@ from voxera.db.repositories.contracts import (
     OrganizationCreate,
     ProductCreate,
     ReviewCreate,
+    ReviewEmbeddingCreate,
     ReviewSentimentCreate,
     SourceCreate,
 )
@@ -221,6 +230,29 @@ class SqlAlchemyReviewRepository:
         review.status = ReviewStatus.READY
         await self._session.flush()
 
+    async def list_for_embedding(
+        self,
+        product_id: UUID,
+        *,
+        model_version: str,
+        limit: int = 500,
+    ) -> list[Review]:
+        already_embedded = select(ReviewEmbedding.review_id).where(
+            ReviewEmbedding.organization_id == self._organization_id,
+            ReviewEmbedding.model_version == model_version,
+        )
+        statement = (
+            select(Review)
+            .where(
+                Review.organization_id == self._organization_id,
+                Review.product_id == product_id,
+                ~Review.id.in_(already_embedded),
+            )
+            .order_by(Review.created_at)
+            .limit(limit)
+        )
+        return list((await self._session.scalars(statement)).all())
+
 
 class SqlAlchemyReviewSentimentRepository:
     def __init__(self, session: AsyncSession, organization_id: UUID) -> None:
@@ -265,6 +297,56 @@ class SqlAlchemyReviewSentimentRepository:
         )
         rows = await self._session.execute(statement)
         return {label: count for label, count in rows.all()}
+
+
+class SqlAlchemyReviewEmbeddingRepository:
+    def __init__(self, session: AsyncSession, organization_id: UUID) -> None:
+        self._session = session
+        self._organization_id = organization_id
+
+    async def upsert(self, data: ReviewEmbeddingCreate) -> ReviewEmbedding:
+        statement = (
+            pg_insert(ReviewEmbedding)
+            .values(
+                organization_id=self._organization_id,
+                product_id=data.product_id,
+                review_id=data.review_id,
+                model_name=data.model_name,
+                model_version=data.model_version,
+                embedding=data.embedding,
+            )
+            .on_conflict_do_update(
+                index_elements=["review_id", "model_version"],
+                set_={"embedding": data.embedding},
+            )
+            .returning(ReviewEmbedding)
+        )
+        result = await self._session.scalars(statement)
+        return result.one()
+
+    async def search_similar(
+        self,
+        product_id: UUID,
+        query_embedding: list[float],
+        *,
+        model_version: str,
+        limit: int = 10,
+    ) -> list[tuple[Review, float]]:
+        distance = ReviewEmbedding.embedding.cosine_distance(query_embedding)
+        similarity = (1 - distance).label("similarity")
+        statement = (
+            select(Review, similarity)
+            .join(ReviewEmbedding, ReviewEmbedding.review_id == Review.id)
+            .where(
+                ReviewEmbedding.organization_id == self._organization_id,
+                ReviewEmbedding.product_id == product_id,
+                ReviewEmbedding.model_version == model_version,
+            )
+            .order_by(distance)
+            .limit(limit)
+        )
+        rows = await self._session.execute(statement)
+        return [(review, float(score)) for review, score in rows.all()]
 
 
 class SqlAlchemyImportJobRepository:
